@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>4D Tesseract Visualization</title>
+    <style>
+        body { margin: 0; background: black; overflow: hidden; }
+    </style>
+</head>
+<body>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// -----------------------------
+// 1. THREE.JS SETUP
+// -----------------------------
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
+
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.z = 6;
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// -----------------------------
+// 2. CREATE TESSERACT GEOMETRY
+// -----------------------------
+function createTesseractVertices(size = 1) {
+    const vertices = [];
+    for (let x = -1; x <= 1; x += 2)
+    for (let y = -1; y <= 1; y += 2)
+    for (let z = -1; z <= 1; z += 2)
+    for (let w = -1; w <= 1; w += 2)
+        vertices.push({ x: x * size, y: y * size, z: z * size, w: w * size });
+    return vertices;
+}
+
+const vertices4D = createTesseractVertices(1.2);
+
+// Edges: connect vertices that differ by only one coordinate
+function createEdges(vertices) {
+    const edges = [];
+    for (let i = 0; i < vertices.length; i++) {
+        for (let j = i + 1; j < vertices.length; j++) {
+            let diff = 0;
+            if (vertices[i].x !== vertices[j].x) diff++;
+            if (vertices[i].y !== vertices[j].y) diff++;
+            if (vertices[i].z !== vertices[j].z) diff++;
+            if (vertices[i].w !== vertices[j].w) diff++;
+            if (diff === 1) edges.push([i, j]);
+        }
+    }
+    return edges;
+}
+
+const edges = createEdges(vertices4D);
+
+// -----------------------------
+// 3. 4D ROTATION MATRICES
+// -----------------------------
+function rotate4D(v, angleXY, angleXW) {
+
+    let { x, y, z, w } = v;
+
+    // Rotate in XY plane (like 2D rotation)
+    let xyX = x * Math.cos(angleXY) - y * Math.sin(angleXY);
+    let xyY = x * Math.sin(angleXY) + y * Math.cos(angleXY);
+
+    // Rotate in XW plane (extra dimension)
+    let xwX = xyX * Math.cos(angleXW) - w * Math.sin(angleXW);
+    let xwW = xyX * Math.sin(angleXW) + w * Math.cos(angleXW);
+
+    return { x: xwX, y: xyY, z, w: xwW };
+}
+
+// -----------------------------
+// 4. PROJECT 4D → 3D
+// -----------------------------
+function project4Dto3D(v, distance = 3) {
+    const wScale = 1 / (distance - v.w);
+    return {
+        x: v.x * wScale,
+        y: v.y * wScale,
+        z: v.z * wScale
+    };
+}
+
+// -----------------------------
+// 5. CREATE LINES IN 3D SPACE
+// -----------------------------
+let lineMaterial = new THREE.LineBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.8 });
+let lineGroup = new THREE.Group();
+scene.add(lineGroup);
+
+function updateTesseract() {
+    lineGroup.clear();
+
+    let rotated = vertices4D.map(v =>
+        rotate4D(v, time * 0.8, time * 0.5)
+    );
+
+    let projected = rotated.map(v =>
+        project4Dto3D(v)
+    );
+
+    edges.forEach(edge => {
+        const geometry = new THREE.BufferGeometry();
+        const points = [];
+
+        let v1 = projected[edge[0]];
+        let v2 = projected[edge[1]];
+
+        points.push(new THREE.Vector3(v1.x, v1.y, v1.z));
+        points.push(new THREE.Vector3(v2.x, v2.y, v2.z));
+
+        geometry.setFromPoints(points);
+
+        let line = new THREE.Line(geometry, lineMaterial);
+        lineGroup.add(line);
+    });
+}
+
+// -----------------------------
+// 6. ANIMATION LOOP
+// -----------------------------
+let time = 0;
+
+function animate() {
+    requestAnimationFrame(animate);
+    time += 0.01;
+
+    updateTesseract();
+    renderer.render(scene, camera);
+}
+
+animate();
+
+// Resize handling
+window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+
+</body>
+</html>
